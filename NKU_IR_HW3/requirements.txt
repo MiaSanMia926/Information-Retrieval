@@ -1,0 +1,9 @@
+streamlit
+faiss-cpu
+sentence-transformers
+transformers
+torch
+torchvision
+pillow
+numpy
+rank_bm25
