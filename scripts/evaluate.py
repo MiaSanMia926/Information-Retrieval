@@ -1,6 +1,11 @@
 import numpy as np
 import faiss
 import os
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+INDEX_DIR = ROOT / "data" / "index"
+CAPTIONS_PATH = ROOT / "data" / "captions.json"
 import json
 from sentence_transformers import SentenceTransformer
 from rank_bm25 import BM25Okapi
@@ -8,15 +13,15 @@ from rank_bm25 import BM25Okapi
 print("=== 多模态检索系统评估 (V4 - 支持 Caption) ===\n")
 
 model = SentenceTransformer('clip-ViT-B-32')
-index = faiss.read_index("index/vector.index")
+index = faiss.read_index(str(INDEX_DIR / "vector.index"))
 
-with open("index/paths.txt") as f:
+with (INDEX_DIR / "paths.txt").open(encoding="utf-8") as f:
     img_paths = [line.strip() for line in f.readlines()]
 
 # 加载 captions
 captions = {}
-if os.path.exists("captions.json"):
-    with open("captions.json", "r", encoding="utf-8") as f:
+if CAPTIONS_PATH.exists():
+    with CAPTIONS_PATH.open(encoding="utf-8") as f:
         captions = json.load(f)
     print(f"✅ 已加载 {len(captions)} 条图像描述")
 else:
@@ -83,6 +88,8 @@ def evaluate_system(use_bm25=False, bm25_weight=0.15, use_feedback=False):
         
         scores = []
         for rank, idx in enumerate(I[0]):
+            if idx < 0:
+                continue
             path = img_paths[idx]
             score = 1.0 / (rank + 60)
             
