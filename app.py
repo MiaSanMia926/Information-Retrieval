@@ -5,6 +5,10 @@ from sentence_transformers import SentenceTransformer
 from PIL import Image
 from rank_bm25 import BM25Okapi
 import os
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent
+INDEX_DIR = ROOT / "data" / "index"
 
 st.set_page_config(page_title="多模态检索系统 Pro+", layout="wide")
 st.title("🚀 多模态智能检索系统")
@@ -14,11 +18,14 @@ st.title("🚀 多模态智能检索系统")
 # =========================
 @st.cache_resource
 def load_all():
+    if not (INDEX_DIR / "vector.index").exists():
+        st.error("尚未构建索引，请先运行 python scripts/build_index.py。")
+        st.stop()
     model = SentenceTransformer('clip-ViT-B-32')
-    index = faiss.read_index("index/vector.index")
+    index = faiss.read_index(str(INDEX_DIR / "vector.index"))
 
-    with open("index/paths.txt") as f:
-        img_paths = [l.strip() for l in f.readlines()]
+    with (INDEX_DIR / "paths.txt").open(encoding="utf-8") as f:
+        img_paths = [str(ROOT / line.strip().replace("\\", "/")) for line in f if line.strip()]
 
     # 👉 BM25：用文件名作为“文本语料”
     docs = [os.path.basename(p) for p in img_paths]
@@ -92,12 +99,14 @@ if q is not None:
     with st.spinner("🔍 检索中..."):
 
         # ========= 第一阶段：CLIP召回 =========
-        D, I = index.search(q, k=20)
+        D, I = index.search(q, k=min(20, len(img_paths)))
 
         candidates = []
         clip_scores = []
 
         for i, idx in enumerate(I[0]):
+            if idx < 0:
+                continue
             candidates.append(img_paths[idx])
             clip_scores.append(D[0][i])
 

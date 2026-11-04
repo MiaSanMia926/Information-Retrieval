@@ -1,4 +1,7 @@
 import os
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
 import faiss
 import numpy as np
 import json
@@ -15,7 +18,7 @@ def build_index(img_dir, index_path):
 
     # 加载 captions.json
     captions = {}
-    caption_path = "captions.json"
+    caption_path = ROOT / "data" / "captions.json"
     if os.path.exists(caption_path):
         try:
             with open(caption_path, "r", encoding="utf-8") as f:
@@ -26,7 +29,7 @@ def build_index(img_dir, index_path):
     else:
         print("⚠️ 未找到 captions.json，将仅使用文件名")
 
-    for file in os.listdir(img_dir):
+    for file in sorted(os.listdir(img_dir)):
         if file.lower().endswith(('jpg', 'jpeg', 'png')):
             path = os.path.join(img_dir, file)
             try:
@@ -34,7 +37,7 @@ def build_index(img_dir, index_path):
                 emb = model.encode(img)
                 
                 embeddings.append(emb)
-                img_list.append(path)
+                img_list.append(Path(path).relative_to(ROOT).as_posix())
                 
                 # 输出时显示使用的文本
                 caption = captions.get(file, "")
@@ -44,6 +47,9 @@ def build_index(img_dir, index_path):
             except Exception as e:
                 print(f"失败: {file}, {e}")
 
+    if not embeddings:
+        raise ValueError("data/images 中没有可读取的 JPG/PNG 图片，请先准备图片数据。")
+
     embeddings = np.array(embeddings).astype('float32')
 
     # ✅ 关键改进1：归一化（变成 cosine similarity）
@@ -52,7 +58,7 @@ def build_index(img_dir, index_path):
     dim = embeddings.shape[1]
 
     # ✅ 关键改进2：IVF 索引（比 Flat 高级）
-    nlist = 50  # 聚类中心数（小数据可以调小）
+    nlist = min(50, len(img_list))  # 聚类中心数（小数据可以调小）
     quantizer = faiss.IndexFlatIP(dim)
     index = faiss.IndexIVFFlat(quantizer, dim, nlist, faiss.METRIC_INNER_PRODUCT)
 
@@ -60,16 +66,16 @@ def build_index(img_dir, index_path):
     index.add(embeddings)
 
     # 搜索时探测更多簇
-    index.nprobe = 10
+    index.nprobe = min(10, nlist)
 
     os.makedirs(index_path, exist_ok=True)
     faiss.write_index(index, os.path.join(index_path, "vector.index"))
 
-    with open(os.path.join(index_path, "paths.txt"), "w") as f:
+    with open(os.path.join(index_path, "paths.txt"), "w", encoding="utf-8") as f:
         for p in img_list:
             f.write(p + "\n")
 
     print(f"✅ 完成：{len(img_list)} 张图片")
 
 if __name__ == "__main__":
-    build_index("data/images", "index")
+    build_index(ROOT / "data" / "images", ROOT / "data" / "index")
